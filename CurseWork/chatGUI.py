@@ -1,7 +1,7 @@
 from tkinter import *
-from ttk import *
+from tkinter.ttk import tkinter
 import socket
-import thread
+import threading
 
 
 class ChatClient(Frame):
@@ -22,9 +22,9 @@ class ChatClient(Frame):
         ScreenSizeY = self.root.winfo_screenheight()
         self.FrameSizeX = 800
         self.FrameSizeY = 600
-        FramePosX = (ScreenSizeX - self.FrameSizeX) / 2
-        FramePosY = (ScreenSizeY - self.FrameSizeY) / 2
-        self.root.geometry("%sx%s+%s+%s" % (self.FrameSizeX, self.FrameSizeY, FramePosX, FramePosY))
+        FramePosX = (ScreenSizeX / 2) - (self.FrameSizeX / 2)
+        FramePosY = (ScreenSizeY / 2) - (self.FrameSizeY / 2)
+        self.root.geometry("%sx%s" % (self.FrameSizeX, self.FrameSizeY))
         self.root.resizable(width=False, height=False)
 
         padX = 10
@@ -97,7 +97,7 @@ class ChatClient(Frame):
             self.serverSoc.bind(serveraddr)
             self.serverSoc.listen(5)
             self.setStatus("Server listening on %s:%s" % serveraddr)
-            thread.start_new_thread(self.listenClients, ())
+            threading.start_new_thread(self.listenClients, ())
             self.serverStatus = 1
             self.name = self.nameVar.get().replace(' ', '')
             if self.name == '':
