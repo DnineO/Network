@@ -1,12 +1,16 @@
 import sys
+import traceback
+import math
+import random
+import socket
+import threading
 from tkinter import *
 from tkinter.filedialog import asksaveasfilename
-import threading
-import socket
-import random
-import math
+import logging
+import time
+import os
 
-isCLI = False  # true коммандная строка
+isCLI = False  # true коммандная строка TODO:коммандную строку, не все возможности
 
 conn_array = []  # список сокетов
 secret_array = dict()
@@ -18,6 +22,9 @@ username = "User"
 location = 0
 port = 0
 top = ""
+
+LOG_FILE_NAME = "log_file.txt"
+LOG_FILE = None
 
 main_body_text = 0
 
@@ -31,6 +38,7 @@ def binWord(word):
         master = master + temp
     return master
 
+
 def xcrypt(message, key):
     count = 0
     master = ""
@@ -41,8 +49,10 @@ def xcrypt(message, key):
         count += 1
     return master
 
+
 def x_encode(string, number):
     return xcrypt(binWord(string), bin(number)[2:])
+
 
 def refract(binary):
     master = ""
@@ -57,15 +67,17 @@ def formatNumber(number):
         temp = '0' + temp
     return temp
 
+
 def netThrow(conn, secret, message):
     try:
         conn.send(formatNumber(len(x_encode(message, secret))).encode())
         conn.send(x_encode(message, secret).encode())
     except socket.error:
         if len(conn_array) != 0:
-            writeToScreen(
-                "Connection issue. Sending message failed.", "System")
+            log("System", "Connection issue. Sending message failed.")
+            writeToScreen("Connection issue. Sending message failed.", "System")
             processFlag("-001")
+
 
 def netCatch(conn, secret):
     try:
@@ -77,9 +89,10 @@ def netCatch(conn, secret):
         return refract(xcrypt(data.decode(), bin(secret)[2:]))
     except socket.error:
         if len(conn_array) != 0:
-            writeToScreen(
-                "Connection issue. Receiving message failed.", "System")
+            log("System", "Connection issue. Receiving message failed.")
+            writeToScreen("Connection issue. Receiving message failed.", "System")
         processFlag("-001")
+
 
 def isPrime(number):
     x = 1
@@ -91,6 +104,7 @@ def isPrime(number):
             return False
     return True
 
+
 def processFlag(number, conn=None):
     global statusConnect
     global conn_array
@@ -101,12 +115,14 @@ def processFlag(number, conn=None):
     t = int(number[1:])
     if t == 1:
         if len(conn_array) == 1:
+            log("System", "Connection closed.")
             writeToScreen("Connection closed.", "System")
             dump = secret_array.pop(conn_array[0])
             dump = conn_array.pop()
             try:
                 dump.close()
             except socket.error:
+                log("System", "Issue with someone being bad about disconnecting")
                 print("Issue with someone being bad about disconnecting")
             if not isCLI:
                 statusConnect.set("Connect")
@@ -114,15 +130,16 @@ def processFlag(number, conn=None):
             return
 
         if conn != None:
-            writeToScreen("Connect to " + conn.getsockname()
-                          [0] + " closed.", "System")
+            log("System", "Connect to " + conn.getsockname()[0] + " closed.")
+            writeToScreen("Connect to " + conn.getsockname()[0] + " closed.", "System")
             dump = secret_array.pop(conn)
             conn_array.remove(conn)
             conn.close()
 
     if t == 2:
         name = netCatch(conn, secret_array[conn])
-        if(isUsernameFree(name)):
+        if (isUsernameFree(name)):
+            log("System", "User " + username_array[conn] + " has changed their username to " + name)
             writeToScreen(
                 "User " + username_array[conn] + " has changed their username to " + name, "System")
             username_array[conn] = name
@@ -134,6 +151,7 @@ def processFlag(number, conn=None):
         Client(data.decode(),
                int(contact_array[conn.getpeername()[0]][0])).start()
 
+
 def processUserCommands(command, param):
     global conn_array
     global secret_array
@@ -143,17 +161,21 @@ def processUserCommands(command, param):
         for letter in param[0]:
             if letter == " " or letter == "\n":
                 if isCLI:
+                    log("System", "Invalid username. No spaces allowed.")
                     error_window(0, "Invalid username. No spaces allowed.")
                 else:
+                    log("System", "Invalid username. No spaces allowed.")
                     error_window(root, "Invalid username. No spaces allowed.")
                 return
         if isUsernameFree(param[0]):
+            log("System", "Username is being changed to " + param[0])
             writeToScreen("Username is being changed to " + param[0], "System")
             for conn in conn_array:
                 conn.send("-002".encode())
                 netThrow(conn, secret_array[conn], param[0])
             username = param[0]
         else:
+            log("System", param[0] + " is already taken as a username")
             writeToScreen(param[0] +
                           " is already taken as a username", "System")
     if command == "disconnect":
@@ -161,11 +183,12 @@ def processUserCommands(command, param):
             conn.send("-001".encode())
         processFlag("-001")
     if command == "connect":
-        if(options_sanitation(param[1], param[0])):
+        if (options_sanitation(param[1], param[0])):
             Client(param[0], int(param[1])).start()
     if command == "host":
-        if(options_sanitation(param[0])):
+        if (options_sanitation(param[0])):
             Server(int(param[0])).start()
+
 
 def isUsernameFree(name):
     global username_array
@@ -175,6 +198,7 @@ def isUsernameFree(name):
             return False
     return True
 
+
 def passFriends(conn):
     global conn_array
     for connection in conn_array:
@@ -183,6 +207,7 @@ def passFriends(conn):
             conn.send(
                 formatNumber(len(connection.getpeername()[0])).encode())
             conn.send(connection.getpeername()[0].encode())
+
 
 def client_options_window(master):
     top = Toplevel(master)
@@ -197,8 +222,9 @@ def client_options_window(master):
     port = Entry(top)
     port.grid(row=1, column=1)
     go = Button(top, text="Connect", command=lambda:
-                client_options_go(location.get(), port.get(), top))
+    client_options_go(location.get(), port.get(), top))
     go.grid(row=2, column=1)
+
 
 def client_options_go(dest, port, window):
     if options_sanitation(port, dest):
@@ -208,21 +234,26 @@ def client_options_go(dest, port, window):
     elif isCLI:
         sys.exit(1)
 
+
 def options_sanitation(por, loc=""):
     global root
     if isCLI:
         root = 0
     if not por.isdigit():
+        log("System", "Please input a port number.")
         error_window(root, "Please input a port number.")
         return False
     if int(por) < 0 or 65555 < int(por):
+        log("System", "Please input a port number between 0 and 65555")
         error_window(root, "Please input a port number between 0 and 65555")
         return False
     if loc != "":
         if not ip_process(loc.split(".")):
+            log("System", "Please input a valid ip address.")
             error_window(root, "Please input a valid ip address.")
             return False
     return True
+
 
 def ip_process(ipArray):
     if len(ipArray) != 4:
@@ -246,8 +277,9 @@ def server_options_window(master):
     port.grid(row=0, column=1)
     port.focus_set()
     go = Button(top, text="Launch", command=lambda:
-                server_options_go(port.get(), top))
+    server_options_go(port.get(), top))
     go.grid(row=1, column=1)
+
 
 def server_options_go(port, window):
     if options_sanitation(port):
@@ -267,7 +299,7 @@ def username_options_window(master):
     name.focus_set()
     name.grid(row=0, column=1)
     go = Button(top, text="Change", command=lambda:
-                username_options_go(name.get(), top))
+    username_options_go(name.get(), top))
     go.grid(row=1, column=1)
 
 
@@ -279,6 +311,7 @@ def username_options_go(name, window):
 def error_window(master, texty):
     global isCLI
     if isCLI:
+        log("System", texty)
         writeToScreen(texty, "System")
     else:
         window = Toplevel(master)
@@ -288,6 +321,7 @@ def error_window(master, texty):
         go = Button(window, text="OK", command=window.destroy)
         go.pack()
         go.focus_set()
+
 
 def optionDelete(window):
     connecter.config(state=NORMAL)
@@ -306,11 +340,11 @@ def contacts_window(master):
     buttons = Frame(cWindow)
     cBut = Button(buttons, text="Connect",
                   command=lambda: contacts_connect(
-                                      listbox.get(ACTIVE).split(" ")))
+                      listbox.get(ACTIVE).split(" ")))
     cBut.pack(side=LEFT)
     dBut = Button(buttons, text="Remove",
                   command=lambda: contacts_remove(
-                                      listbox.get(ACTIVE).split(" "), listbox))
+                      listbox.get(ACTIVE).split(" "), listbox))
     dBut.pack(side=LEFT)
     aBut = Button(buttons, text="Add",
                   command=lambda: contacts_add(listbox, cWindow))
@@ -322,8 +356,10 @@ def contacts_window(master):
                        person + " " + contact_array[person][0])
     listbox.pack(side=LEFT, fill=BOTH, expand=1)
 
+
 def contacts_connect(item):
     Client(item[1], int(item[2])).start()
+
 
 def contacts_remove(item, listbox):
     if listbox.size() != 0:
@@ -346,14 +382,15 @@ def contacts_add(listbox, master):
     port = Entry(aWindow)
     port.grid(row=2, column=1)
     go = Button(aWindow, text="Add", command=lambda:
-                contacts_add_helper(name.get(), ip.get(), port.get(),
-                                    aWindow, listbox))
+    contacts_add_helper(name.get(), ip.get(), port.get(),
+                        aWindow, listbox))
     go.grid(row=3, column=1)
 
 
 def contacts_add_helper(username, ip, port, window, listbox):
     for letter in username:
         if letter == " " or letter == "\n":
+            log("System", "Invalid username. No spaces allowed.")
             error_window(root, "Invalid username. No spaces allowed.")
             return
     if options_sanitation(port, ip):
@@ -361,6 +398,7 @@ def contacts_add_helper(username, ip, port, window, listbox):
         contact_array[ip] = [port, username]
         window.destroy()
         return
+
 
 def load_contacts():
     global contact_array
@@ -375,11 +413,13 @@ def load_contacts():
         line = filehandle.readline()
     filehandle.close()
 
+
 def dump_contacts():
     global contact_array
     try:
         filehandle = open("data\\contacts.dat", "w")
     except IOError:
+        log("System", "Can't dump contacts.")
         print("Can't dump contacts.")
         return
     for contact in contact_array:
@@ -393,9 +433,12 @@ def placeText(text):
     global conn_array
     global secret_array
     global username
+
+    log(username, text)
     writeToScreen(text, username)
     for person in conn_array:
         netThrow(person, secret_array[person], text)
+
 
 def writeToScreen(text, username=""):
     global main_body_text
@@ -414,6 +457,7 @@ def writeToScreen(text, username=""):
         main_body_text.yview(END)
         main_body_text.config(state=DISABLED)
 
+
 def processUserText(event):
     data = text_input.get()
     if data[0] != "/":
@@ -428,7 +472,7 @@ def processUserText(event):
     text_input.delete(0, END)
 
 
-def processUserInput(text): #for CLI
+def processUserInput(text):  # for CLI
     if text[0] != "/":
         placeText(text)
     else:
@@ -440,7 +484,33 @@ def processUserInput(text): #for CLI
         processUserCommands(command, params)
 
 
-class Server (threading.Thread):
+def openFile():
+    global LOG_FILE
+    if os.path.exists(LOG_FILE_NAME):
+        LOG_FILE = open(LOG_FILE_NAME, 'a')
+    else:
+        LOG_FILE = open(LOG_FILE_NAME, 'w')
+
+
+def closeFile():
+    global LOG_FILE
+    LOG_FILE.close()
+
+
+def log(func, cmd):
+    global LOG_FILE
+    logmsg = time.strftime("%Y-%m-%d %H-%M-%S [-] " + func)
+    print("\033[31m%s\033[0m: \033[32m%s\033[0m" % (logmsg, cmd))
+
+    try:
+        openFile()
+        LOG_FILE.write("[%s]: %s" % (logmsg, cmd) + "\r")
+    except Exception as err:
+        print(err)
+    closeFile()
+
+
+class Server(threading.Thread):
     def __init__(self, port):
         threading.Thread.__init__(self)
         self.port = port
@@ -449,8 +519,8 @@ class Server (threading.Thread):
         global conn_array
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.bind(('', self.port))
-
         if len(conn_array) == 0:
+            log("System", "Socket is good, waiting for connections on port:" + str(self.port))
             writeToScreen(
                 "Socket is good, waiting for connections on port: " +
                 str(self.port), "System")
@@ -470,6 +540,7 @@ class Server (threading.Thread):
         conn_init.close()
         conn, addr = serv.accept()
         conn_array.append(conn)
+        log("System", "Connected by " + str(addr[0]))
         writeToScreen("Connected by " + str(addr[0]), "System")
 
         global statusConnect
@@ -516,7 +587,7 @@ class Server (threading.Thread):
         Server(self.port).start()
 
 
-class Client (threading.Thread):
+class Client(threading.Thread):
     def __init__(self, host, port):
         threading.Thread.__init__(self)
         self.port = port
@@ -530,10 +601,12 @@ class Client (threading.Thread):
         try:
             conn_init.connect((self.host, self.port))
         except socket.timeout:
+            log("System", "Timeout issue. Host possible not there.")
             writeToScreen("Timeout issue. Host possible not there.", "System")
             connecter.config(state=NORMAL)
             raise SystemExit(0)
         except socket.error:
+            log("System", "Connection issue. Host actively refused connection.")
             writeToScreen(
                 "Connection issue. Host actively refused connection.", "System")
             connecter.config(state=NORMAL)
@@ -544,8 +617,8 @@ class Client (threading.Thread):
         conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         conn.connect((self.host, porte))
 
-        writeToScreen("Connected to: " + self.host +
-                      " on port: " + str(porte), "System")
+        log("System", "Connected to: " + self.host + " on port: " + str(porte))
+        writeToScreen("Connected to: " + self.host + " on port: " + str(porte), "System")
 
         global statusConnect
         statusConnect.set("Disconnect")
@@ -581,11 +654,13 @@ class Client (threading.Thread):
             contact_array[conn.getpeername()[0]] = [str(self.port), "No_nick"]
         threading.Thread(target=Runner, args=(conn, secret)).start()
 
+
 def Runner(conn, secret):
     global username_array
     while 1:
         data = netCatch(conn, secret)
         if data != 1:
+            log(username_array[conn], data)
             writeToScreen(data, username_array[conn])
 
 
@@ -597,12 +672,13 @@ def QuickClient():
     destination = Entry(window)
     destination.grid(row=0, column=1)
     go = Button(window, text="Connect", command=lambda:
-                client_options_go(destination.get(), "9999", window))
+    client_options_go(destination.get(), "9999", window))
     go.grid(row=1, column=1)
 
 
 def QuickServer():
     Server(9999).start()
+
 
 def saveHistory():
     global main_body_text
@@ -612,12 +688,16 @@ def saveHistory():
     try:
         filehandle = open(file_name + ".txt", "w")
     except IOError:
+        log("System", "Can't save history.")
+        error_window(root, "Can't save history.")
         print("Can't save history.")
         return
     contents = main_body_text.get(1.0, END)
     for line in contents:
         filehandle.write(line)
     filehandle.close()
+    log("System", "History saved.")
+    print("History saved.")
 
 
 def connects(clientType):
@@ -638,12 +718,14 @@ def toOne():
     global clientType
     clientType = 0
 
+
 def toTwo():
     global clientType
     clientType = 1
 
 
 if len(sys.argv) > 1 and sys.argv[1] == "-cli":
+    log("System", "Starting command line chat")
     print("Starting command line chat")
 
 else:
@@ -674,7 +756,7 @@ else:
     menubar.add_cascade(label="Server", menu=server_menu)
 
     menubar.add_command(label="Contacts", command=lambda:
-                        contacts_window(root))
+    contacts_window(root))
 
     root.config(menu=menubar)
 
@@ -688,7 +770,7 @@ else:
     body_text_scroll.config(command=main_body_text.yview)
     main_body_text.config(yscrollcommand=body_text_scroll.set)
     main_body.pack()
-
+    log("System", "Welcome to the chat program!")
     main_body_text.insert(END, "Welcome to the chat program!")
     main_body_text.config(state=DISABLED)
 
@@ -709,12 +791,8 @@ else:
 
     load_contacts()
 
-
-
-
-
-# ------------------------------------------------------------
+    # ------------------------------------------------------------
 
     root.mainloop()
 
-    dump_contacts()
+    # dump_contacts()
